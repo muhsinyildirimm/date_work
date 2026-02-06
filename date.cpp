@@ -28,6 +28,43 @@ namespace project {
         return month_days[Date::isleap(year)][month - 1];
     }
 
+    static bool is_valid_date(int day, int month, int year) {
+        // Yıl kontrolü
+        if (year < Date::year_base) {
+            return false;
+        }
+        
+        // Ay kontrolü
+        if (month < 1 || month > 12) {
+            return false;
+        }
+        
+        // Gün kontrolü
+        if (day < 1 || day > days_in_month(month, year)) {
+            return false;
+        }
+        
+        return true;
+    }
+
+    static void validate_date(int day, int month, int year) {
+        // Yıl kontrolü
+        if (year < Date::year_base) {
+            throw InvalidYearException(year, Date::year_base);
+        }
+        
+        // Ay kontrolü
+        if (month < 1 || month > 12) {
+            throw InvalidMonthException(month);
+        }
+        
+        // Gün kontrolü
+        int maxDay = days_in_month(month, year);
+        if (day < 1 || day > maxDay) {
+            throw InvalidDayException(day, month, year);
+        }
+    }
+
     static int year_to_days(int year) {
         int y = year - 1;
         return y * 365 + y / 4 - y / 100 + y / 400;
@@ -78,19 +115,44 @@ namespace project {
     // Constructors
     Date::Date() : m_day(1), m_month(1), m_year(year_base) {}
 
-    Date::Date(int d, int m, int y) : m_day(d), m_month(m), m_year(y) {}
+    Date::Date(int d, int m, int y) {
+        validate_date(d, m, y);
+        m_day = d;
+        m_month = m;
+        m_year = y;
+    }
 
     Date::Date(const char* p) {
+        if (!p) {
+            throw InvalidDateFormatException("null pointer");
+        }
+        
         std::istringstream iss(p);
-        char delim;
-        iss >> m_day >> delim >> m_month >> delim >> m_year;
+        char delim1, delim2;
+        int d, m, y;
+        
+        if (!(iss >> d >> delim1 >> m >> delim2 >> y)) {
+            throw InvalidDateFormatException(p);
+        }
+        
+        // Ayraç kontrolü
+        if (delim1 != '/' && delim1 != '-' && delim1 != '.') {
+            throw InvalidDateFormatException(p);
+        }
+        
+        validate_date(d, m, y);
+        m_day = d;
+        m_month = m;
+        m_year = y;
     }
 
     Date::Date(std::time_t timer) {
-
         std::tm time_info;
-        localtime_s(&time_info, &timer);
-
+#ifdef _MSC_VER
+        localtime_s(&time_info, &timer);  // Visual Studio için güvenli versiyon
+#else
+        time_info = *std::localtime(&timer);  // Diğer derleyiciler için
+#endif
         m_day = time_info.tm_mday;
         m_month = time_info.tm_mon + 1;
         m_year = time_info.tm_year + 1900;
@@ -132,21 +194,25 @@ namespace project {
 
     // Setters
     Date& Date::set_month_day(int day) {
+        validate_date(day, m_month, m_year);
         m_day = day;
         return *this;
     }
 
     Date& Date::set_month(int month) {
+        validate_date(m_day, month, m_year);
         m_month = month;
         return *this;
     }
 
     Date& Date::set_year(int year) {
+        validate_date(m_day, m_month, year);
         m_year = year;
         return *this;
     }
 
     Date& Date::set(int day, int mon, int year) {
+        validate_date(day, mon, year);
         m_day = day;
         m_month = mon;
         m_year = year;
@@ -282,8 +348,14 @@ namespace project {
 
     std::istream& operator>>(std::istream& is, Date& date) {
         int d, m, y;
-        char delim;
-        is >> d >> delim >> m >> delim >> y;
+        char delim1, delim2;
+        
+        if (!(is >> d >> delim1 >> m >> delim2 >> y)) {
+            is.setstate(std::ios::failbit);
+            throw InvalidDateFormatException("Giris hatasi");
+        }
+        
+        validate_date(d, m, y);
         date.set(d, m, y);
         return is;
     }
